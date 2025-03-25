@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#SBATCH --gres=gpu:1
+#SBATCH -N1
+#SBATCH -n1
+#SBATCH -c4
+#SBATCH --mem-per-cpu=16G
+#SBATCH --output=tmp/rlpd_d4rl_%j.log
+
+export MUJOCO_GL=egl
+
+SEED=0
+RUN_NAME="rlpd_humanoid_walk"
+python -m train_finetuning_pixels --env_name=humanoid-walk-v0 \
+                                       --project_name=sim2real \
+                                       --run_name=${RUN_NAME}_seed_${SEED} \
+                                       --wandb_group=rlpd_humanoid_walk \
+                                       --start_training=5000 \
+                                       --max_steps=3_000_000 \
+                                       --config=configs/rlpd_pixels_config.py \
+                                       --seed=${SEED} \
+                                       --dataset_path=/home/sumeet/rlpd/vd4rl

@@ -17,6 +17,8 @@ from rlpd.wrappers import WANDBVideo, wrap_pixels
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("project_name", "rlpd_pixels", "wandb project name.")
+flags.DEFINE_string("run_name", "rlpd_humanoid_walk", "wandb run name")
+flags.DEFINE_string("wandb_group", "debug", "wandb group name")
 flags.DEFINE_string("env_name", "cheetah-run-v0", "Environment name.")
 flags.DEFINE_string(
     "dataset_level", "expert", "Dataset level (e.g., random, expert, etc.)."
@@ -86,7 +88,10 @@ def combine(one_dict, other_dict):
 
 
 def main(_):
-    wandb.init(project=FLAGS.project_name)
+    wandb.init(project=FLAGS.project_name,
+               entity='qdrl',
+               group=FLAGS.wandb_group,
+               name=FLAGS.run_name)
     wandb.config.update(FLAGS)
 
     action_repeat = FLAGS.action_repeat or PLANET_ACTION_REPEAT.get(FLAGS.env_name, 2)
