@@ -1,6 +1,7 @@
 import flax.linen as nn
 import jax.lax
 import jax.numpy as jnp
+import einops
 
 from flax.core.frozen_dict import FrozenDict
 from rlpd.networks import default_init
@@ -34,28 +35,35 @@ class Conv2DBlock(nn.Module):
         x = nn.GroupNorm(num_groups=self.features)(x)
         x = nn.leaky_relu(x, negative_slope=0.3)
         # 2nd block
-        x = nn.Conv(
-            self.features,
-            kernel_size=(3, 3),
-            strides=(1, 1),
-            padding=1
-        )
-        x = nn.GroupNorm(num_groups=self.features)(x)
-        x = nn.leaky_relu(x, negative_slope=0.3)
+        # x = nn.Conv(
+        #     self.features,
+        #     kernel_size=(3, 3),
+        #     strides=(1, 1),
+        #     padding=1
+        # )(x)
+        # x = nn.GroupNorm(num_groups=self.features)(x)
+        # x = nn.leaky_relu(x, negative_slope=0.3)
         return x
 
 
 class QuantizedEncoder(nn.Module):
     num_latents: int
-    features: Sequence[int] = (32, 64, 128, 256),
-    kernel_sizes: Sequence[int] = (4, 4, 4, 4)
+    features: Sequence[int] = (32, 64, 128, 256)
+    kernel_sizes: Sequence[int] = (3, 3, 3, 3)
     strides: Sequence[int] = (2, 2, 2, 2)
     padding: Sequence[int] = (1, 1, 1, 1)
 
     mlp_hidden_layers: Sequence[int] = (256, 256)
 
     @nn.compact
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, observations: Union[FrozenDict, Dict]) -> jnp.ndarray:
+        observations = FrozenDict(observations)
+        x = observations['pixels'].astype(jnp.float32) / 255.0  # b h w c f
+        if len(x.shape) == 4:
+            x = x[None]
+        f = x.shape[-1]
+        x = einops.rearrange(x, 'b h w c f -> (b f) h w c', f=f)
+        # x = jnp.reshape(x, (*x.shape[:-2], -1))
         for features, kernel_size, stride, padding in zip(self.features, self.kernel_sizes, self.strides, self.padding):
             x = Conv2DBlock(features, kernel_size, stride, padding)(x)
 
@@ -90,42 +98,65 @@ class HistoryEncoder(nn.Module):
                     padding=2
                     )(x)
         x = nn.gelu(x)
-        x = x.reshape((x.shape[0], *x.shape[1:]))
+        x = x.reshape(*x.shape[:-2], -1)
         x = nn.Dense(self.emb_dim, kernel_init=default_init())(x)
         return x
 
 
 class ALDAEncoder(nn.Module):
-    encoder_cls: Type[nn.Module]
     history_encoder_cls: Type[nn.Module]
-    network_cls: Type[nn.Module] # actor or critic model
+    network_cls: Type[nn.Module]  # actor or critic model
     latent_dim: int
     stop_gradient: bool = False 
     pixel_keys: Tuple[str, ...] = ("pixels",)
     depth_keys: Tuple[str, ...] = ()
-    
-    @nn.compact
+
+    def setup(self):
+        self.history_encoder = self.history_encoder_cls()
+
     def __call__(self,
+                 base_encoder: nn.Module,
+                 latent_model: Optional[nn.Module],
                  observations: Union[FrozenDict, Dict],
                  actions: Optional[jnp.ndarray] = None,
                  training: bool = False):
+        x = self.compute_embeddings(base_encoder, latent_model, observations)
+        return self.compute_output(x, actions, training)
+
+    def compute_embeddings(self,
+                           base_encoder: nn.Module,
+                           latent_model: nn.Module,
+                           observations: Union[FrozenDict, Dict]):
         observations = FrozenDict(observations)
+        f = observations['pixels'].shape[-1]
+        x = base_encoder.apply_fn({"params": base_encoder.params}, observations)  # (b f) e
+        x = latent_model.apply_fn({"params": latent_model.params}, x)['z_hat']
+        x = einops.rearrange(x, '(b f) e -> b e f', f=f)
+        x = self.history_encoder(x)
+        return x
 
-        xs = []
-        for i, pixel_key in enumerate(self.pixel_keys):
-            x = observations[pixel_key].astype(jnp.float32) / 255.0
-            x = self.encoder_cls(x)
-            x = self.history_encoder_cls(x)
-            if self.stop_gradient:
-                x = jax.lax.stop_gradient(x)
+    def compute_temporal_embeddings(self, embeds: jnp.ndarray, batch_size: int):
+        """
+        :param embeds: shape (b f) e tensor where f is framestack, e is embed dim
+        :param batch_size: batch_size
+        """
+        x = einops.rearrange(embeds, '(b f) e -> b e f', b=batch_size)
+        x = self.history_encoder(x)
+        if self.stop_gradient:
+            x = jax.lax.stop_gradient(x)
+        return x
 
-            x = nn.Dense(self.latent_dim, kernel_init=default_init())(x)
-            x = nn.LayerNorm()(x)
-            x = nn.tanh(x)
-            xs.append(x)
+    @nn.compact
+    def compute_output(self, embeds: jnp.ndarray, actions: Optional[jnp.ndarray] = None, training: bool = False):
+        x = nn.Dense(self.latent_dim, kernel_init=default_init())(embeds)
+        x = nn.LayerNorm()(x)
+        x = nn.tanh(x)
+        if x.shape[0] == 1:
+            x = x[0]
 
-        x = jnp.concatenate(xs, axis=-1)
         if actions is None:
             return self.network_cls()(x, training)
         else:
             return self.network_cls()(x, actions, training)
+
+

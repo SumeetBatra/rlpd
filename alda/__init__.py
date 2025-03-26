@@ -1,3 +1,3 @@
-from encoder import ALDAEncoder, QuantizedEncoder, HistoryEncoder
-from decoder import QuantizedDecoder
-from latents import AssociativeLatent
+from alda.encoder import ALDAEncoder, QuantizedEncoder, HistoryEncoder
+from alda.decoder import QuantizedDecoder
+from alda.latents import AssociativeLatent

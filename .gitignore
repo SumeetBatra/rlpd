@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 vd4rl
+dmcontrol_generalization_benchmark
 # C extensions
 *.so
 

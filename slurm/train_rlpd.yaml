@@ -9,8 +9,8 @@
 export MUJOCO_GL=egl
 
 SEED=0
-RUN_NAME="rlpd_humanoid_walk"
-srun XLA_PYTHON_CLIENT_PREALLOCATE=false python -m train_finetuning_pixels --env_name=humanoid-walk-v0 \
+RUN_NAME="rlpd_jax_humanoid_walk"
+srun python -m train_finetuning_pixels --env_name=humanoid-walk-v0 \
                                        --project_name=sim2real \
                                        --run_name=${RUN_NAME}_seed_${SEED} \
                                        --wandb_group=rlpd_humanoid_walk \
@@ -18,4 +18,5 @@ srun XLA_PYTHON_CLIENT_PREALLOCATE=false python -m train_finetuning_pixels --env
                                        --max_steps=3_000_000 \
                                        --config=configs/rlpd_pixels_config.py \
                                        --seed=${SEED} \
-                                       --dataset_path=/home/sumeet/rlpd/vd4rl
+                                       --dataset_path=/home/sumeet/rlpd/vd4rl \
+                                       --save_vide=True

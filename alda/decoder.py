@@ -23,24 +23,24 @@ class Conv2DTransposeBlock(nn.Module):
         x = nn.GroupNorm(num_groups=self.features)(x)
         x = nn.leaky_relu(x, negative_slope=0.3)
         # 2nd block
-        x = nn.Conv(
-            self.features,
-            kernel_size=(3, 3),
-            strides=(1, 1),
-            padding=1
-        )
-        x = nn.GroupNorm(num_groups=self.features)(x)
-        x = nn.leaky_relu(x, negative_slope=0.3)
+        # x = nn.ConvTranspose(
+        #     self.features,
+        #     kernel_size=(3, 3),
+        #     strides=(1, 1),
+        #     padding=1
+        # )(x)
+        # x = nn.GroupNorm(num_groups=self.features)(x)
+        # x = nn.leaky_relu(x, negative_slope=0.3)
         return x
 
 
 class QuantizedDecoder(nn.Module):
     mlp_dims: Sequence[int] = (256, 256, 4096)
-    transition_shape: Sequence[int]
+    transition_shape: Sequence[int] = (4, 4, 256)
     features: Sequence[int] = (128, 64, 32, 16)
     kernel_sizes: Sequence[int] = (4, 4, 4, 4)
     strides: Sequence[int] = (2, 2, 2, 2)
-    padding: Sequence[int] = (1, 1, 1, 1)
+    padding: Sequence[int] = (2, 2, 2, 2)
 
     @nn.compact
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:

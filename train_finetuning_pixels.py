@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 import dmcgym
+# import dmc2gym
 import gym
 import numpy as np
 import tqdm
@@ -9,10 +10,12 @@ from ml_collections import config_flags
 
 import wandb
 from rlpd.agents import DrQLearner
+from rlpd.agents import ALDALearner
 from rlpd.data import MemoryEfficientReplayBuffer, ReplayBuffer
 from rlpd.data.vd4rl_datasets import VD4RLDataset
 from rlpd.evaluation import evaluate
 from rlpd.wrappers import WANDBVideo, wrap_pixels
+# from dmcontrol_generalization_benchmark.src.env.wrappers import FrameStack, DMCObsWrapper, ColorWrapper
 
 FLAGS = flags.FLAGS
 
@@ -115,6 +118,20 @@ def main(_):
     if FLAGS.save_video:
         env = WANDBVideo(env)
     env.seed(FLAGS.seed)
+
+    # color_env = dmc2gym.make(domain_name='humanoid',
+    #                          task_name='walk',
+    #                          frame_skip=2,
+    #                          seed=FLAGS.seed,
+    #                          visualize_reward=False,
+    #                          from_pixels=True,
+    #                          height=64,
+    #                          width=64,
+    #                          episode_length=1000,
+    #                          is_distracting_cs=False)
+    # color_env = FrameStack(color_env, 3)
+    # color_env = ColorWrapper(color_env, 'color_hard')
+    # color_env = DMCObsWrapper(color_env)
 
     ds = VD4RLDataset(
         env,
@@ -226,6 +243,15 @@ def main(_):
             )
             for k, v in eval_info.items():
                 wandb.log({f"evaluation/{k}": v}, step=i * action_repeat)
+            #
+            # color_info = evaluate(
+            #     agent,
+            #     color_env,
+            #     num_episodes=FLAGS.eval_episodes,
+            #     save_video=FLAGS.save_video
+            # )
+            # for k, v in color_info.items():
+            #     wandb.log({f"color/{k}": v}, step=i * action_repeat)
 
             if FLAGS.save_dir is not None:
                 from flax.training import checkpoints
